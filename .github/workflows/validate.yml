@@ -1,0 +1,43 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    name: testes e lint da API
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: api/requirements-dev.txt
+      - run: pip install -r api/requirements-dev.txt
+      - name: ruff
+        run: ruff check .
+        working-directory: api
+      - name: pytest
+        run: pytest -q
+        working-directory: api
+
+  infra:
+    name: cfn-lint nos templates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "cfn-lint>=1.20"
+      - run: cfn-lint infra/*.yaml
+
+  image:
+    name: build da imagem
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # --platform linux/amd64 casa com o CpuArchitecture da task definition.
+      - run: docker build --platform linux/amd64 -t sso-lab-api:ci api

@@ -12,3 +12,7 @@ __pycache__/
 .env
 *.log
 .DS_Store
+
+# IDEs
+.idea/
+.vscode/
