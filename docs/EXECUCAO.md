@@ -125,6 +125,44 @@ gh secret set ALERT_EMAIL --body "seu-email@exemplo.com"
 A partir daqui o pipeline consegue se autenticar sozinho, sem nenhuma chave
 armazenada.
 
+### 1.3 Sobre o subject claim do GitHub
+
+A política de confiança da role casa o claim `sub` do token OIDC. O formato que
+quase toda documentação mostra é:
+
+```
+repo:<dono>/<repo>:ref:refs/heads/<branch>
+```
+
+Mas o GitHub passou a emitir **identificadores numéricos imutáveis**:
+
+```
+repo:lucianoaugusto1@121799540/desafio-aws-sso@1380489339:ref:refs/heads/main
+```
+
+Os números são o id do usuário e o id do repositório. Eles protegem contra
+renomear e re-registrar um repositório para herdar a confiança de outro. Por
+isso o [`00-bootstrap.yaml`](../infra/00-bootstrap.yaml) aceita os dois padrões,
+mantendo os nomes ancorados e deixando só os ids como coringa.
+
+Se o pipeline falhar com `Not authorized to perform sts:AssumeRoleWithWebIdentity`
+mesmo com tudo aparentemente correto, inspecione o claim real com um passo
+temporário no workflow:
+
+```yaml
+- name: claims do token
+  run: |
+    TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+      "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r .value)
+    PAYLOAD=$(echo "$TOKEN" | cut -d. -f2)
+    PAD=$(( (4 - ${#PAYLOAD} % 4) % 4 ))
+    [ "$PAD" -gt 0 ] && PAYLOAD="${PAYLOAD}$(printf '=%.0s' $(seq 1 $PAD))"
+    echo "$PAYLOAD" | tr '_-' '/+' | base64 -d | jq '{iss, aud, sub}'
+```
+
+Ele imprime só as claims públicas, nunca o token. O `sub` que aparecer ali é o
+que a política precisa casar.
+
 ---
 
 ## Etapa 2 — Publicar a imagem no ECR
@@ -349,6 +387,7 @@ sozinha. Para evitar até isso, troque `BackupRetentionPeriod: 1` por `0` em
 | 10 | Alarme não chega por e-mail | Assinatura SNS em `PendingConfirmation` | Clicar no link do e-mail de confirmação |
 | 11 | CloudTrail registra tudo como `root` | Autenticação feita com o usuário raiz | Criar e usar um usuário IAM |
 | 12 | Budget falha com `AccessDenied` | Acesso a faturamento por usuário IAM desativado | Como root: *Account → IAM user and role access to billing information → Activate* |
+| 13 | Pipeline falha com `Not authorized to perform sts:AssumeRoleWithWebIdentity`, mesmo com role, provider e `aud` corretos | O `sub` do GitHub traz ids numéricos: `repo:dono@123/repo@456:ref:...`, e o padrão clássico `repo:dono/repo:*` não casa | Aceitar os dois formatos na `StringLike` (veja a seção 1.3) |
 
 ---
 
