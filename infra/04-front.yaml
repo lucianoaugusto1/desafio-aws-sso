@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Bucket S3 servindo o front estatico pelo website endpoint (HTTP puro).
+  Sem CloudFront: o front precisa falar com a API em HTTP, e uma pagina
+  servida por HTTPS teria a chamada bloqueada por mixed content.
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # Nome de bucket e global na AWS inteira; o id da conta garante unicidade.
+      BucketName: !Sub "${AWS::StackName}-${AWS::AccountId}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        # Desligado de proposito: sem isto a policy de leitura publica abaixo
+        # nao tem efeito e o site responde 403.
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: LeituraPublicaDoSite
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+
+Outputs:
+  BucketName:
+    Value: !Ref SiteBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketName"
+  SiteUrl:
+    Description: Endereco do site - HTTP, sem TLS
+    Value: !GetAtt SiteBucket.WebsiteURL
+    Export:
+      Name: !Sub "${AWS::StackName}-SiteUrl"
