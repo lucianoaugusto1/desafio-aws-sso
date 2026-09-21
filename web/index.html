@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSO Lab</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 28rem;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+    }
+    fieldset { border: 1px solid currentColor; border-radius: .5rem; margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: .75rem; }
+    input { width: 100%; padding: .5rem; box-sizing: border-box; }
+    button { padding: .5rem 1rem; margin-right: .5rem; cursor: pointer; }
+    #saida { padding: .75rem; border-radius: .5rem; background: rgba(127,127,127,.15); white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>SSO Lab</h1>
+  <p>Laboratório de infraestrutura AWS. Sem HTTPS, dados descartáveis.</p>
+
+  <fieldset>
+    <legend>Credenciais</legend>
+    <label>E-mail <input id="email" type="email" value="ana@exemplo.com"></label>
+    <label>Senha <input id="senha" type="password" value="senha-segura"></label>
+    <button id="btn-cadastrar">Cadastrar</button>
+    <button id="btn-entrar">Entrar</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sessão</legend>
+    <button id="btn-quem-sou">Quem sou eu</button>
+    <button id="btn-sair">Sair</button>
+  </fieldset>
+
+  <div id="saida">Pronto.</div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

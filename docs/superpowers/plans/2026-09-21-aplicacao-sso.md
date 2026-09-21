@@ -622,6 +622,7 @@ Expected: FAIL com `ModuleNotFoundError: No module named 'app.main'`
 
 ```python
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -649,9 +650,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Alias de injeção. O FastAPI lê o Depends de dentro do Annotated; escrever
+# `session: Session = Depends(...)` funciona mas coloca uma chamada de função
+# no valor default, que o ruff acusa em B008.
+SessionDep = Annotated[Session, Depends(get_session)]
+
 
 @app.get("/health")
-def health(session: Session = Depends(get_session)) -> dict[str, str]:
+def health(session: SessionDep) -> dict[str, str]:
     """Prova que a task alcança o banco — é a verificação da Fase 3."""
     try:
         session.execute(text("SELECT 1"))
@@ -742,7 +748,7 @@ E a rota ao final de `api/app/main.py`:
 
 ```python
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=UserOut)
-def register(body: Credentials, session: Session = Depends(get_session)) -> User:
+def register(body: Credentials, session: SessionDep) -> User:
     if session.scalar(select(User).where(User.email == body.email)) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -839,7 +845,7 @@ E acrescentar a rota. As duas falhas devolvem a **mesma** mensagem de propósito
 
 ```python
 @app.post("/auth/login", response_model=Token)
-def login(body: Credentials, session: Session = Depends(get_session)) -> Token:
+def login(body: Credentials, session: SessionDep) -> Token:
     user = session.scalar(select(User).where(User.email == body.email))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(
@@ -955,16 +961,15 @@ Declarar o esquema logo após o `add_middleware`. `auto_error=False` faz o FastA
 
 ```python
 bearer_scheme = HTTPBearer(auto_error=False)
+
+CredentialsDep = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 ```
 
 E acrescentar a rota:
 
 ```python
 @app.get("/auth/me", response_model=UserOut)
-def me(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    session: Session = Depends(get_session),
-) -> User:
+def me(credentials: CredentialsDep, session: SessionDep) -> User:
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1220,6 +1225,9 @@ requirements-dev.txt
 `api/docker-compose.yml` — o `healthcheck` do Postgres com `depends_on: condition` evita a corrida clássica em que a API sobe antes do banco aceitar conexões.
 
 ```yaml
+# Nome explícito para não colidir com outras stacks do Docker nesta máquina.
+name: sso-lab
+
 services:
   db:
     image: postgres:16-alpine
@@ -1228,7 +1236,9 @@ services:
       POSTGRES_PASSWORD: sso
       POSTGRES_DB: sso
     ports:
-      - "5432:5432"
+      # 5433 no host: a 5432 costuma estar ocupada por outro Postgres.
+      # A API não usa esta porta — ela fala com db:5432 pela rede do compose.
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sso"]
       interval: 3s
