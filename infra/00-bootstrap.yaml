@@ -77,6 +77,22 @@ Resources:
                   - sns:*
                   - budgets:*
                 Resource: "*"
+              # ManageMasterUserPassword faz o RDS guardar a senha no Secrets
+              # Manager cifrada com a chave gerenciada aws/secretsmanager. Sem
+              # estas acoes o CreateDBInstance falha com "The specified KMS key
+              # [null] ... isn't accessible by the current user". Nao aparece
+              # quando se testa como root, que tem tudo implicitamente.
+              # Em producao, restringiria com a condicao kms:ViaService.
+              - Effect: Allow
+                Action:
+                  - kms:DescribeKey
+                  - kms:CreateGrant
+                  - kms:RetireGrant
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:ListAliases
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - iam:CreateRole

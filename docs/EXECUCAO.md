@@ -274,6 +274,12 @@ Resultado da execução real:
 | `/auth/me` com token | usuário correto |
 | `/auth/me` sem token | `401` |
 
+> **Testar como root esconde problemas de permissão.** Na execução real, o
+> deploy manual funcionou porque eu estava autenticado como usuário raiz, que
+> tem tudo implicitamente. Ao rodar pelo pipeline — com a role escopada — o RDS
+> falhou por falta de `kms:`. Se você quer confiança de que a role está
+> completa, **rode pelo pipeline**, não da sua máquina como admin.
+
 **O `/health` é a verificação que importa.** Se ele responde `{"db":"ok"}`, três
 coisas independentes funcionaram: a task tinha permissão IAM para ler o segredo,
 o Secrets Manager devolveu a credencial, e o security group deixou a conexão
@@ -388,6 +394,8 @@ sozinha. Para evitar até isso, troque `BackupRetentionPeriod: 1` por `0` em
 | 11 | CloudTrail registra tudo como `root` | Autenticação feita com o usuário raiz | Criar e usar um usuário IAM |
 | 12 | Budget falha com `AccessDenied` | Acesso a faturamento por usuário IAM desativado | Como root: *Account → IAM user and role access to billing information → Activate* |
 | 13 | Pipeline falha com `Not authorized to perform sts:AssumeRoleWithWebIdentity`, mesmo com role, provider e `aud` corretos | O `sub` do GitHub traz ids numéricos: `repo:dono@123/repo@456:ref:...`, e o padrão clássico `repo:dono/repo:*` não casa | Aceitar os dois formatos na `StringLike` (veja a seção 1.3) |
+| 14 | `sso-lab-data` falha com `The specified KMS key [null] ... isn't accessible by the current user` | `ManageMasterUserPassword` cifra o segredo com a chave `aws/secretsmanager`, e a role de deploy não tinha nenhuma ação `kms:` | Acrescentar `kms:DescribeKey`, `CreateGrant`, `GenerateDataKey`, `Decrypt` e `Encrypt` à role |
+| 15 | Stack em `ROLLBACK_COMPLETE` recusa novo deploy | CloudFormation não atualiza stack nesse estado | `aws cloudformation delete-stack` antes de tentar de novo |
 
 ---
 
