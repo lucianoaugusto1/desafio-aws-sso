@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Aplicacao no ECS Fargate: segredo do JWT, log group, cluster, roles,
+  task definition e service. Sem load balancer - a task recebe IP publico.
+
+Parameters:
+  BootstrapStackName:
+    Type: String
+    Default: sso-lab-bootstrap
+  NetworkStackName:
+    Type: String
+    Default: sso-lab-network
+  DataStackName:
+    Type: String
+    Default: sso-lab-data
+  ImageTag:
+    Type: String
+    Default: latest
+  DesiredCount:
+    Type: Number
+    Default: 0
+    Description: >
+      Zero por padrao. Na primeira criacao da stack a imagem pode ainda nao
+      existir, e task parada nao custa nada. O pipeline passa 1.
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    Description: Retencao curta mantem o uso dentro dos 5 GB gratuitos
+  ApiPort:
+    Type: Number
+    Default: 8000
+
+Resources:
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      # Sem Name de proposito. Um segredo apagado entra numa janela de
+      # recuperacao de 7 dias, e recriar outro com o mesmo nome dentro dela
+      # falha. Como o laboratorio e destruido e recriado o tempo todo, deixamos
+      # o CloudFormation gerar um nome unico e referenciamos pelo ARN.
+      Description: Chave de assinatura dos tokens da API
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: jwt_secret
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Usada pelo agente do ECS para puxar a imagem e gravar logs
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Usada pelo codigo da aplicacao em execucao
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ler-segredos
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                # Restrito aos dois segredos deste laboratorio, nao a todos.
+                Resource:
+                  - !Ref JwtSecret
+                  - Fn::ImportValue: !Sub "${DataStackName}-DbSecretArn"
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-api"
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: "256"
+      Memory: "512"
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        # Explicito de proposito: build feito em Mac com Apple Silicon gera
+        # arm64 por padrao e a task falharia com "exec format error". Os
+        # scripts e o pipeline passam --platform linux/amd64.
+        CpuArchitecture: X86_64
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Essential: true
+          Image: !Sub
+            - "${Repo}:${Tag}"
+            - Repo:
+                Fn::ImportValue: !Sub "${BootstrapStackName}-EcrUri"
+              Tag: !Ref ImageTag
+          PortMappings:
+            - ContainerPort: !Ref ApiPort
+              Protocol: tcp
+          Environment:
+            # ARNs nao sao segredos - sao enderecos. Quem le os segredos e o
+            # proprio codigo, com a TaskRole acima.
+            - Name: DB_SECRET_ARN
+              Value:
+                Fn::ImportValue: !Sub "${DataStackName}-DbSecretArn"
+            - Name: JWT_SECRET_ARN
+              Value: !Ref JwtSecret
+            - Name: DB_HOST
+              Value:
+                Fn::ImportValue: !Sub "${DataStackName}-DbEndpoint"
+            - Name: DB_PORT
+              Value:
+                Fn::ImportValue: !Sub "${DataStackName}-DbPort"
+            - Name: DB_NAME
+              Value:
+                Fn::ImportValue: !Sub "${DataStackName}-DbName"
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${AWS::StackName}-service"
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      DesiredCount: !Ref DesiredCount
+      DeploymentConfiguration:
+        # Sem load balancer e com uma unica task, o padrao (100/200) tentaria
+        # subir uma segunda task antes de derrubar a primeira. 0/100 faz o
+        # deploy parar e so entao iniciar - alguns segundos de indisponibilidade
+        # em troca de nunca pagar duas tasks.
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          # Sem NAT Gateway, o IP publico e o que permite puxar do ECR.
+          AssignPublicIp: ENABLED
+          Subnets: !Split
+            - ","
+            - Fn::ImportValue: !Sub "${NetworkStackName}-SubnetIds"
+          SecurityGroups:
+            - Fn::ImportValue: !Sub "${NetworkStackName}-ApiSecurityGroupId"
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterName"
+  ServiceName:
+    Value: !GetAtt Service.Name
+    Export:
+      Name: !Sub "${AWS::StackName}-ServiceName"
+  LogGroupName:
+    Value: !Ref LogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-LogGroupName"
+  JwtSecretArn:
+    Value: !Ref JwtSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-JwtSecretArn"
