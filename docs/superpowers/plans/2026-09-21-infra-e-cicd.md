@@ -452,7 +452,11 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub "${AWS::StackName}-postgres"
       Engine: postgres
-      EngineVersion: "16"
+      # Minor fixado: o RDS aposenta minors antigas e recusa cria-las. Se um
+      # dia o deploy reclamar da versao, rode:
+      #   aws rds describe-db-engine-versions --engine postgres \
+      #     --query 'DBEngineVersions[].EngineVersion'
+      EngineVersion: "16.9"
       DBInstanceClass: !Ref DbInstanceClass
       AllocatedStorage: !Ref AllocatedStorage
       StorageType: gp2
