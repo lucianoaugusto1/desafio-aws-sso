@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Bootstrap do laboratorio: confianca OIDC com o GitHub Actions, role de deploy
+  e repositorio ECR. Esta stack e criada uma vez e nao e removida pelo destroy.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Description: Dono do repositorio no GitHub
+    Default: lucianoaugusto1
+  GitHubRepo:
+    Type: String
+    Description: Nome do repositorio no GitHub
+    Default: desafio-aws-sso
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # A AWS deixou de validar estes thumbprints para o GitHub, mas o recurso
+      # ainda exige a propriedade preenchida.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-deploy"
+      Description: Role assumida pelo GitHub Actions via OIDC
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                # Restringe a confianca a este repositorio. Sem esta condicao,
+                # qualquer repositorio do GitHub poderia assumir a role.
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepo}:*"
+      Policies:
+        - PolicyName: deploy-do-laboratorio
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Amplo dentro dos servicos do laboratorio, e fechado fora deles.
+              # Nao e o que se usaria em producao, onde cada acao seria listada.
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - ec2:*
+                  - ecr:*
+                  - ecs:*
+                  - rds:*
+                  - s3:*
+                  - logs:*
+                  - secretsmanager:*
+                  - cloudwatch:*
+                  - cloudtrail:*
+                  - sns:*
+                  - budgets:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:CreateServiceLinkedRole
+                Resource: "*"
+
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: sso-lab-api
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        # Sem isto o ECR acumula uma imagem por deploy e sai do free tier.
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Mantem apenas as 5 imagens mais recentes",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+Outputs:
+  DeployRoleArn:
+    Description: ARN para o campo role-to-assume do GitHub Actions
+    Value: !GetAtt DeployRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-DeployRoleArn"
+  EcrUri:
+    Description: URI do repositorio ECR
+    Value: !GetAtt ApiRepository.RepositoryUri
+    Export:
+      Name: !Sub "${AWS::StackName}-EcrUri"
