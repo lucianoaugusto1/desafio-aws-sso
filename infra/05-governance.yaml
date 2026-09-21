@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Governanca do laboratorio: trilha do CloudTrail, alarmes do CloudWatch
+  notificando por e-mail e um orcamento mensal com alertas.
+
+Parameters:
+  AppStackName:
+    Type: String
+    Default: sso-lab-app
+  AlertEmail:
+    Type: String
+    Description: E-mail que recebe alarmes e alertas de orcamento
+    AllowedPattern: "[^@]+@[^@]+\\.[^@]+"
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-alertas"
+      DisplayName: SSO Lab
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      # A AWS envia um e-mail de confirmacao: sem clicar no link, nenhum
+      # alarme chega. Vale conferir a caixa de entrada apos o deploy.
+      Endpoint: !Ref AlertEmail
+
+  TrailBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-trail-${AWS::AccountId}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: expira-em-7-dias
+            Status: Enabled
+            ExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt TrailBucket.Arn
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${TrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+
+  Trail:
+    Type: AWS::CloudTrail::Trail
+    # Sem esta dependencia o CloudTrail tenta gravar antes da policy existir
+    # e a criacao da stack falha.
+    DependsOn: TrailBucketPolicy
+    Properties:
+      TrailName: !Sub "${AWS::StackName}-trail"
+      S3BucketName: !Ref TrailBucket
+      IsLogging: true
+      IncludeGlobalServiceEvents: true
+      # Apenas management events e uma unica regiao: e o que a AWS entrega
+      # sem cobrar. Data events (leitura de objeto no S3) seriam pagos.
+      IsMultiRegionTrail: false
+      EnableLogFileValidation: true
+
+  ApiErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName:
+        Fn::ImportValue: !Sub "${AppStackName}-LogGroupName"
+      FilterPattern: ERROR
+      MetricTransformations:
+        - MetricNamespace: SsoLab
+          MetricName: ApiErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-erros-na-api"
+      AlarmDescription: Mais de 5 linhas de ERROR no log em 5 minutos
+      Namespace: SsoLab
+      MetricName: ApiErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  ApiCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-cpu-da-task"
+      AlarmDescription: CPU da task acima de 80% por 10 minutos
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: !Sub "${AppStackName}-ClusterName"
+        - Name: ServiceName
+          Value:
+            Fn::ImportValue: !Sub "${AppStackName}-ServiceName"
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${AWS::StackName}-mensal"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 50
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic
+  TrailBucketName:
+    Value: !Ref TrailBucket
