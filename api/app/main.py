@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.aws_secrets import hydrate_env_from_secrets
 from app.db import get_engine, get_session
 from app.models import Base, User
 from app.schemas import Credentials, Token, UserOut
@@ -22,6 +23,10 @@ from app.settings import get_settings
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # A ordem importa: hidratar o ambiente, invalidar o cache da configuração,
+    # só então tocar no banco — o engine é construído sob demanda.
+    hydrate_env_from_secrets()
+    get_settings.cache_clear()
     Base.metadata.create_all(bind=get_engine())
     yield
 
