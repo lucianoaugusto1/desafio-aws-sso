@@ -10,6 +10,10 @@ usuários em PostgreSQL e um front estático que consome essa API.
 > **Não use isto em produção.** Não há HTTPS, refresh token, rate limit nem
 > endurecimento de segurança. É um laboratório com dados descartáveis.
 
+📖 **[Roteiro passo a passo em `docs/EXECUCAO.md`](docs/EXECUCAO.md)** — do zero
+até a destruição, com os comandos exatos, o custo real medido e as 12 armadilhas
+que apareceram numa execução de verdade.
+
 ## O que é provisionado
 
 ```
@@ -37,7 +41,7 @@ AWS Budgets (teto de gasto).
 | `api/` | Backend: FastAPI, Dockerfile, testes e compose com Postgres local |
 | `web/` | Frontend estático: HTML e JavaScript puro, sem build |
 | `scripts/` | `up.sh`, `down.sh`, `destroy.sh`, `task-ip.sh` |
-| `docs/` | Spec de desenho e material do laboratório |
+| `docs/` | Roteiro de execução, spec de desenho e os planos de implementação |
 | `.github/workflows/` | `validate.yml` e `deploy.yml` |
 
 ## Custo
