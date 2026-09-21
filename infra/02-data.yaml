@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  RDS PostgreSQL do laboratorio. Sem IP publico, alcancavel apenas pelo
+  security group da API. A senha e gerada e rotacionada pelo proprio RDS
+  no Secrets Manager - nenhuma senha aparece neste template.
+
+Parameters:
+  NetworkStackName:
+    Type: String
+    Default: sso-lab-network
+    Description: Stack de rede da qual importar VPC e security groups
+  DbName:
+    Type: String
+    Default: sso
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    Description: db.t4g.micro esta no free tier por 12 meses
+  AllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: 20 GB e o teto do free tier
+
+Resources:
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets do laboratorio
+      SubnetIds: !Split
+        - ","
+        - Fn::ImportValue: !Sub "${NetworkStackName}-SubnetIds"
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    # Por padrao o RDS usa DeletionPolicy Snapshot: o destroy deixaria um
+    # snapshot para tras, que continua sendo cobrado. No laboratorio queremos
+    # que o destroy realmente zere o custo.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-postgres"
+      Engine: postgres
+      EngineVersion: "17.5"
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref AllocatedStorage
+      StorageType: gp2
+      DBName: !Ref DbName
+      MasterUsername: postgres
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Sub "${NetworkStackName}-DbSecurityGroupId"
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      DeleteAutomatedBackups: true
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-postgres"
+
+Outputs:
+  DbEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+    Export:
+      Name: !Sub "${AWS::StackName}-DbEndpoint"
+  DbPort:
+    Value: !GetAtt Database.Endpoint.Port
+    Export:
+      Name: !Sub "${AWS::StackName}-DbPort"
+  DbName:
+    Value: !Ref DbName
+    Export:
+      Name: !Sub "${AWS::StackName}-DbName"
+  DbSecretArn:
+    Description: Segredo criado e rotacionado pelo proprio RDS
+    Value: !GetAtt Database.MasterUserSecret.SecretArn
+    Export:
+      Name: !Sub "${AWS::StackName}-DbSecretArn"
