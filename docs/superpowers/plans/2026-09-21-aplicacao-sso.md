@@ -1225,6 +1225,9 @@ requirements-dev.txt
 `api/docker-compose.yml` — o `healthcheck` do Postgres com `depends_on: condition` evita a corrida clássica em que a API sobe antes do banco aceitar conexões.
 
 ```yaml
+# Nome explícito para não colidir com outras stacks do Docker nesta máquina.
+name: sso-lab
+
 services:
   db:
     image: postgres:16-alpine
@@ -1233,7 +1236,9 @@ services:
       POSTGRES_PASSWORD: sso
       POSTGRES_DB: sso
     ports:
-      - "5432:5432"
+      # 5433 no host: a 5432 costuma estar ocupada por outro Postgres.
+      # A API não usa esta porta — ela fala com db:5432 pela rede do compose.
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sso"]
       interval: 3s

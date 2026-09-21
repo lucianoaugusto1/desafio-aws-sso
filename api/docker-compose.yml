@@ -1,0 +1,30 @@
+# Nome explícito para não colidir com outras stacks do Docker nesta máquina.
+name: sso-lab
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sso
+      POSTGRES_PASSWORD: sso
+      POSTGRES_DB: sso
+    ports:
+      # 5433 no host: a 5432 costuma estar ocupada por outro Postgres.
+      # A API não usa esta porta — ela fala com db:5432 pela rede do compose.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sso"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://sso:sso@db:5432/sso
+      JWT_SECRET: dev-secret-nao-use-em-producao
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
