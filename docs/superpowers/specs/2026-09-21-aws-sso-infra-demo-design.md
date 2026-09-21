@@ -50,10 +50,15 @@ Fargate e Secrets Manager não têm free tier. Uma sessão de demonstração de
 | Item | 3h |
 |---|---|
 | Fargate 0.25 vCPU / 0.5 GB | $0,037 |
+| Endereço IPv4 público da task | $0,015 |
 | RDS `db.t4g.micro` + 20 GB | $0,06 — ou $0,00 se a conta tiver menos de 12 meses |
-| Secrets Manager (rateado por hora) | $0,002 |
+| Secrets Manager, 2 segredos (rateado) | $0,003 |
 | S3, ECR, CloudWatch, CloudTrail, Budgets | $0,00 (free tier) |
-| **Total** | **≈ $0,10** |
+| **Total** | **≈ $0,115** |
+
+Desde fevereiro de 2024 a AWS cobra US$ 0,005/h por endereço IPv4 público,
+inclusive o que o Fargate anexa à task. Sem load balancer, esse IP é o próprio
+endereço da API — não há como evitá-lo nesta arquitetura.
 
 Com as stacks destruídas, o custo é $0,00. O `AWS::Budgets::Budget` de $5/mês
 existe como rede de segurança contra esquecimento.

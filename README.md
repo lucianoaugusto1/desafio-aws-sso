@@ -45,11 +45,29 @@ AWS Budgets (teto de gasto).
 Fargate e Secrets Manager não têm free tier. A infra é **efêmera** por desenho:
 o serviço ECS sobe com `desiredCount: 0` e só é escalado durante a demonstração.
 
-| Estado | Custo |
+| Estado | Por hora | Por mês se esquecido |
+|---|---|---|
+| Tudo ligado (task + RDS) | US$ 0,038 | US$ 27,70 |
+| `make down` — Fargate e IP liberados, RDS de pé | US$ 0,020 | **US$ 14,80** |
+| `make destroy` | US$ 0,00 | ~US$ 0,01 (imagem no ECR) |
+
+Abertura do custo horário com tudo ligado, em `us-east-1`:
+
+| Item | US$/h |
 |---|---|
-| Destruída | $0,00 |
-| No ar, serviço em 0 | ~$0,02/h (só RDS, ou $0 se a conta tem < 12 meses) |
-| Demonstração de 3h com tudo ligado | ~$0,10 |
+| Fargate 0,25 vCPU / 0,5 GB | 0,0123 |
+| **Endereço IPv4 público da task** | **0,0050** |
+| RDS `db.t4g.micro` | 0,0160 |
+| Armazenamento RDS 20 GB gp2 | 0,0032 |
+| Secrets Manager (2 segredos) | 0,0011 |
+| S3, ECR, CloudWatch, CloudTrail, Budgets | 0,0000 |
+
+Com free tier válido (conta com menos de 12 meses), RDS e armazenamento vão a
+zero: US$ 0,018/h ligado.
+
+**O risco real não é a hora de demonstração — é esquecer a infra de pé.** E
+atenção: `make down` para o Fargate e libera o IP, mas **não** desliga o RDS.
+Só `make destroy` zera.
 
 Um `AWS::Budgets::Budget` de US$ 5 com alertas em 50%, 80% e 100% existe como
 rede de segurança contra esquecimento.
