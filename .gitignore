@@ -1,0 +1,14 @@
+# gerado pelo pipeline / scripts a cada deploy
+web/config.js
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# ambiente
+.env
+*.log
+.DS_Store
