@@ -90,10 +90,22 @@ resto usa. Rode uma vez.
 
 ### 1. Instalar a AWS CLI
 
+Use o script oficial da AWS. Ele instala no seu usuário, sem `sudo`, em
+`~/.local/share/aws-cli` com link em `~/.local/bin`:
+
 ```bash
-brew install awscli
+curl -fsSL https://awscli.amazonaws.com/v2/install.sh | bash
 aws --version
 ```
+
+> **Não instale pelo Homebrew.** A fórmula `awscli` usa o `python@3.14` do
+> Homebrew, que é compilado com `--with-system-expat`. Se o bottle tiver sido
+> construído num macOS mais novo que o seu, o `aws` quebra logo na partida com
+> `Symbol not found: _XML_SetAllocTrackerActivationThreshold` — o `botocore`
+> faz parse de XML em toda chamada. O script oficial embute o próprio Python e
+> é imune a isso. Para atualizar depois, use `aws update`.
+
+A CLI precisa ser **2.32.0 ou maior** para o `aws login` do passo 3.
 
 ### 2. Criar o usuário IAM
 
@@ -114,18 +126,29 @@ O [README daquela pasta](infra/policies/README.md) explica o alcance dela.
 Com o usuário criado: **Security credentials → Create access key → Command line
 interface (CLI)**. A *secret access key* aparece uma única vez.
 
-### 3. Configurar a CLI
+### 3. Autenticar
+
+Prefira o `aws login`: ele autentica pelo navegador com as credenciais que você
+já usa no console e entrega credenciais **temporárias**, válidas por até 12
+horas. Nenhuma chave de longa duração fica guardada na máquina.
+
+Para usá-lo, anexe ao seu usuário IAM, além do `AdministratorAccess`, a política
+gerenciada **`SignInLocalDevelopmentAccess`**. Então:
 
 ```bash
-aws configure
-```
-
-Informe a chave, o segredo, `us-east-1` como região e `json` como formato.
-Confirme:
-
-```bash
+aws configure set region us-east-1
+aws login
 aws sts get-caller-identity
 ```
+
+Ao terminar a sessão de trabalho, `aws logout`.
+
+**Alternativa com access key.** Se preferir credenciais permanentes, crie uma
+access key no usuário IAM (*Security credentials → Create access key → Command
+line interface*) e rode `aws configure`, informando chave, segredo, `us-east-1`
+e `json`. Funciona igual, mas deixa um segredo de longa duração em
+`~/.aws/credentials` — que é justamente o que o resto deste laboratório evita,
+já que o pipeline usa OIDC.
 
 ### 4. Criar a stack de bootstrap
 
