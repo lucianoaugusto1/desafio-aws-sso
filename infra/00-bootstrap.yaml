@@ -44,7 +44,17 @@ Resources:
               StringLike:
                 # Restringe a confianca a este repositorio. Sem esta condicao,
                 # qualquer repositorio do GitHub poderia assumir a role.
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepo}:*"
+                #
+                # Dois padroes porque o GitHub passou a embutir identificadores
+                # numericos imutaveis no subject:
+                #   legado : repo:<dono>/<repo>:ref:refs/heads/<branch>
+                #   atual  : repo:<dono>@<idDono>/<repo>@<idRepo>:ref:refs/heads/<branch>
+                # Os ids protegem contra renomear e re-registrar o repositorio
+                # para herdar esta confianca. Os nomes seguem ancorados; so os
+                # ids sao coringa.
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubOwner}/${GitHubRepo}:*"
+                  - !Sub "repo:${GitHubOwner}@*/${GitHubRepo}@*:*"
       Policies:
         - PolicyName: deploy-do-laboratorio
           PolicyDocument:
