@@ -1,0 +1,67 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# id-token: write e o que permite ao runner pedir o token OIDC. Sem esta
+# permissao o configure-aws-credentials falha sem explicar o motivo.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    name: build, deploy e publicacao
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: assumir a role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: build e push da imagem
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="${REGISTRY}/sso-lab-api"
+          docker build --platform linux/amd64 \
+            -t "${IMAGE}:${GITHUB_SHA}" \
+            -t "${IMAGE}:latest" \
+            api
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:latest"
+
+      - name: deploy das stacks
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+        run: ./scripts/deploy.sh
+
+      - name: escalar, descobrir o IP e publicar o front
+        run: ./scripts/up.sh
+
+      - name: resumo
+        run: |
+          {
+            echo "### Ambiente publicado"
+            echo
+            echo '```'
+            cat web/config.js
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
