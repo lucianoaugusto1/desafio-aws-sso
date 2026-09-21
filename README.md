@@ -32,7 +32,7 @@ AWS Budgets (teto de gasto).
 
 | Pasta | Conteúdo |
 |---|---|
-| `infra/` | Os 6 templates CloudFormation, de `00-oidc` a `05-governance` |
+| `infra/` | Os 6 templates CloudFormation, de `00-bootstrap` a `05-governance` |
 | `api/` | Backend: FastAPI, Dockerfile, testes e compose com Postgres local |
 | `web/` | Frontend estático: HTML e JavaScript puro, sem build |
 | `scripts/` | `up.sh`, `down.sh`, `destroy.sh`, `task-ip.sh` |
@@ -68,7 +68,7 @@ Nenhuma começa antes da anterior passar.
 
 | Fase | Entrega | Verificação |
 |---|---|---|
-| 0 | AWS CLI, credenciais, repositório, stack `00-oidc` | `aws sts get-caller-identity` |
+| 0 | AWS CLI, credenciais, repositório, stack `00-bootstrap` | `aws sts get-caller-identity` |
 | 1 | `01-network` + `02-data` | RDS com status `available` |
 | 2 | API FastAPI rodando local | `pytest` verde e login devolvendo JWT |
 | 3 | `03-app` — imagem no ECR, task no Fargate | `/health` retorna `{"db":"ok"}` |
@@ -81,3 +81,64 @@ Nenhuma começa antes da anterior passar.
 O desenho completo, com contrato dos endpoints, esquema do banco, decisões e
 riscos, está em
 [`docs/superpowers/specs/2026-09-21-aws-sso-infra-demo-design.md`](docs/superpowers/specs/2026-09-21-aws-sso-infra-demo-design.md).
+
+## Fase 0 — preparação da máquina e da conta
+
+Esta é a única fase que não é automatizada: ela cria as credenciais que todo o
+resto usa. Rode uma vez.
+
+### 1. Instalar a AWS CLI
+
+```bash
+brew install awscli
+aws --version
+```
+
+### 2. Configurar as credenciais
+
+No console da AWS, em IAM, crie um usuário com `AdministratorAccess` e gere uma
+chave de acesso. Então:
+
+```bash
+aws configure
+```
+
+Informe a chave, o segredo, `us-east-1` como região e `json` como formato.
+Confirme:
+
+```bash
+aws sts get-caller-identity
+```
+
+### 3. Criar a stack de bootstrap
+
+Ela cria a confiança OIDC com o GitHub, a role de deploy e o repositório ECR.
+É a única stack criada à mão, e não é removida pelo `make destroy`.
+
+```bash
+aws cloudformation deploy \
+  --stack-name sso-lab-bootstrap \
+  --template-file infra/00-bootstrap.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides GitHubOwner=lucianoaugusto1 GitHubRepo=desafio-aws-sso
+```
+
+### 4. Entregar o ARN da role ao GitHub
+
+```bash
+ROLE_ARN=$(aws cloudformation describe-stacks \
+  --stack-name sso-lab-bootstrap \
+  --query "Stacks[0].Outputs[?OutputKey=='DeployRoleArn'].OutputValue" \
+  --output text)
+
+gh secret set AWS_DEPLOY_ROLE_ARN --body "$ROLE_ARN"
+gh secret set ALERT_EMAIL --body "seu-email@exemplo.com"
+```
+
+A partir daqui, um push na `main` sobe o ambiente inteiro sozinho. Para operar à
+mão, use `make deploy`, `make up` e `make down`.
+
+### Confirmar a assinatura do SNS
+
+Depois do primeiro deploy da stack de governança, a AWS envia um e-mail de
+confirmação. **Sem clicar no link, nenhum alarme chega.**
