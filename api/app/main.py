@@ -2,11 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db import get_engine, get_session
-from app.models import Base
+from app.models import Base, User
+from app.schemas import Credentials, UserOut
+from app.security import hash_password
 
 
 @asynccontextmanager
@@ -38,3 +40,18 @@ def health(session: Session = Depends(get_session)) -> dict[str, str]:
             detail=f"banco indisponível: {exc.__class__.__name__}",
         ) from exc
     return {"status": "ok", "db": "ok"}
+
+
+@app.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=UserOut)
+def register(body: Credentials, session: Session = Depends(get_session)) -> User:
+    if session.scalar(select(User).where(User.email == body.email)) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="e-mail já cadastrado",
+        )
+
+    user = User(email=body.email, password_hash=hash_password(body.password))
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
