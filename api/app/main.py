@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.db import get_engine, get_session
 from app.models import Base, User
-from app.schemas import Credentials, UserOut
-from app.security import hash_password
+from app.schemas import Credentials, Token, UserOut
+from app.security import create_access_token, hash_password, verify_password
+from app.settings import get_settings
 
 
 @asynccontextmanager
@@ -55,3 +56,18 @@ def register(body: Credentials, session: Session = Depends(get_session)) -> User
     session.commit()
     session.refresh(user)
     return user
+
+
+@app.post("/auth/login", response_model=Token)
+def login(body: Credentials, session: Session = Depends(get_session)) -> Token:
+    user = session.scalar(select(User).where(User.email == body.email))
+    if user is None or not verify_password(body.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="credenciais inválidas",
+        )
+
+    return Token(
+        access_token=create_access_token(str(user.id)),
+        expires_in=get_settings().jwt_expires_seconds,
+    )
