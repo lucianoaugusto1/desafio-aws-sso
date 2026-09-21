@@ -33,6 +33,7 @@ AWS Budgets (teto de gasto).
 | Pasta | Conteúdo |
 |---|---|
 | `infra/` | Os 6 templates CloudFormation, de `00-bootstrap` a `05-governance` |
+| `infra/policies/` | Política IAM para o usuário que opera o laboratório pela CLI |
 | `api/` | Backend: FastAPI, Dockerfile, testes e compose com Postgres local |
 | `web/` | Frontend estático: HTML e JavaScript puro, sem build |
 | `scripts/` | `up.sh`, `down.sh`, `destroy.sh`, `task-ip.sh` |
@@ -94,10 +95,26 @@ brew install awscli
 aws --version
 ```
 
-### 2. Configurar as credenciais
+### 2. Criar o usuário IAM
 
-No console da AWS, em IAM, crie um usuário com `AdministratorAccess` e gere uma
-chave de acesso. Então:
+No console: **IAM → Users → Create user**. Não marque acesso ao console — este
+usuário é só para a CLI. Em **Set permissions → Attach policies directly**,
+anexe **`AdministratorAccess`**.
+
+Vale saber por que admin, e não algo mais restrito: o passo 3 cria um OIDC
+provider e uma role IAM com política inline. Qualquer política que permita
+`iam:CreateRole`, `iam:PutRolePolicy` e `iam:PassRole` já é equivalente a admin
+— com essas três ações dá para criar uma role administrativa e assumi-la.
+Restringir aqui custa trabalho sem entregar segurança real.
+
+Se ainda assim precisar de uma política nomeada — conta compartilhada, política
+interna —, use [`infra/policies/usuario-cli.json`](infra/policies/usuario-cli.json).
+O [README daquela pasta](infra/policies/README.md) explica o alcance dela.
+
+Com o usuário criado: **Security credentials → Create access key → Command line
+interface (CLI)**. A *secret access key* aparece uma única vez.
+
+### 3. Configurar a CLI
 
 ```bash
 aws configure
@@ -110,7 +127,7 @@ Confirme:
 aws sts get-caller-identity
 ```
 
-### 3. Criar a stack de bootstrap
+### 4. Criar a stack de bootstrap
 
 Ela cria a confiança OIDC com o GitHub, a role de deploy e o repositório ECR.
 É a única stack criada à mão, e não é removida pelo `make destroy`.
@@ -123,7 +140,7 @@ aws cloudformation deploy \
   --parameter-overrides GitHubOwner=lucianoaugusto1 GitHubRepo=desafio-aws-sso
 ```
 
-### 4. Entregar o ARN da role ao GitHub
+### 5. Entregar o ARN da role ao GitHub
 
 ```bash
 ROLE_ARN=$(aws cloudformation describe-stacks \
@@ -138,7 +155,14 @@ gh secret set ALERT_EMAIL --body "seu-email@exemplo.com"
 A partir daqui, um push na `main` sobe o ambiente inteiro sozinho. Para operar à
 mão, use `make deploy`, `make up` e `make down`.
 
-### Confirmar a assinatura do SNS
+### Duas armadilhas conhecidas
 
-Depois do primeiro deploy da stack de governança, a AWS envia um e-mail de
-confirmação. **Sem clicar no link, nenhum alarme chega.**
+**O AWS Budgets pode recusar mesmo com `AdministratorAccess`.** O acesso a dados
+de faturamento por usuário IAM depende de um interruptor separado: logado como
+**root**, vá em *Account → IAM user and role access to billing information →
+Activate*. Se a stack `sso-lab-governance` falhar com `AccessDenied` em alguma
+ação `budgets:`, é quase certo que seja isso.
+
+**A assinatura do SNS precisa ser confirmada.** Depois do primeiro deploy da
+stack de governança, a AWS envia um e-mail de confirmação. Sem clicar no link,
+nenhum alarme chega.
