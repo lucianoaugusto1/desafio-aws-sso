@@ -39,7 +39,7 @@ AWS Budgets (teto de gasto).
 | `infra/` | Os 6 templates CloudFormation, de `00-bootstrap` a `05-governance` |
 | `infra/policies/` | Política IAM para o usuário que opera o laboratório pela CLI |
 | `api/` | Backend: FastAPI, Dockerfile, testes e compose com Postgres local |
-| `web/` | Frontend estático: HTML e JavaScript puro, sem build |
+| `web/` | Frontend estático: HTML, CSS e JavaScript puro, sem build |
 | `scripts/` | `up.sh`, `down.sh`, `destroy.sh`, `task-ip.sh` |
 | `docs/` | Roteiro de execução, spec de desenho e os planos de implementação |
 | `.github/workflows/` | `validate.yml` e `deploy.yml` |
