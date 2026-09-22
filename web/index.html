@@ -4,43 +4,102 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SSO Lab</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body {
-      font-family: system-ui, sans-serif;
-      max-width: 28rem;
-      margin: 3rem auto;
-      padding: 0 1rem;
-      line-height: 1.5;
-    }
-    fieldset { border: 1px solid currentColor; border-radius: .5rem; margin-bottom: 1.5rem; }
-    label { display: block; margin-bottom: .75rem; }
-    input { width: 100%; padding: .5rem; box-sizing: border-box; }
-    button { padding: .5rem 1rem; margin-right: .5rem; cursor: pointer; }
-    #saida { padding: .75rem; border-radius: .5rem; background: rgba(127,127,127,.15); white-space: pre-wrap; }
-  </style>
+  <meta name="description" content="Cliente de demonstração do microserviço de autenticação do laboratório AWS.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>SSO Lab</h1>
-  <p>Laboratório de infraestrutura AWS. Sem HTTPS, dados descartáveis.</p>
+<div class="envoltorio">
 
-  <fieldset>
-    <legend>Credenciais</legend>
-    <label>E-mail <input id="email" type="email" value="ana@exemplo.com"></label>
-    <label>Senha <input id="senha" type="password" value="senha-segura"></label>
-    <button id="btn-cadastrar">Cadastrar</button>
-    <button id="btn-entrar">Entrar</button>
-  </fieldset>
+  <header>
+    <h1>SSO Lab</h1>
+    <p class="subtitulo">Cliente de demonstração do microserviço de autenticação.</p>
+    <div class="barra-status">
+      <span class="pilula" id="pilula-api" data-estado="aguardando">
+        <span class="ponto"></span><span id="texto-api">verificando API…</span>
+      </span>
+      <span class="pilula" id="pilula-banco" data-estado="aguardando">
+        <span class="ponto"></span><span id="texto-banco">banco…</span>
+      </span>
+    </div>
+  </header>
 
-  <fieldset>
-    <legend>Sessão</legend>
-    <button id="btn-quem-sou">Quem sou eu</button>
-    <button id="btn-sair">Sair</button>
-  </fieldset>
+  <!-- ============ deslogado ============ -->
+  <section class="cartao" id="cartao-acesso">
+    <h2>Acesso</h2>
 
-  <div id="saida">Pronto.</div>
+    <div class="abas" role="tablist" aria-label="Entrar ou criar conta">
+      <button class="aba" role="tab" id="aba-entrar" aria-selected="true"
+              aria-controls="formulario">Entrar</button>
+      <button class="aba" role="tab" id="aba-criar" aria-selected="false"
+              aria-controls="formulario">Criar conta</button>
+    </div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+    <div class="aviso" id="aviso-acesso" role="alert" hidden></div>
+
+    <form id="formulario" novalidate>
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="username"
+               value="ana@exemplo.com" required>
+        <p class="erro-campo" id="erro-email" aria-live="polite"></p>
+      </div>
+
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input id="senha" name="senha" type="password" autocomplete="current-password"
+               value="senha-segura" required>
+        <p class="dica" id="dica-senha">Mínimo de 8 caracteres.</p>
+        <p class="erro-campo" id="erro-senha" aria-live="polite"></p>
+      </div>
+
+      <button type="submit" class="principal" id="enviar">Entrar</button>
+    </form>
+  </section>
+
+  <!-- ============ logado ============ -->
+  <section class="cartao" id="cartao-sessao" hidden>
+    <h2>Sessão ativa</h2>
+
+    <div class="aviso" id="aviso-sessao" role="alert" hidden></div>
+
+    <dl class="linhas">
+      <dt>Usuário</dt>      <dd id="sessao-email">—</dd>
+      <dt>ID</dt>           <dd id="sessao-id">—</dd>
+      <dt>Criado em</dt>    <dd id="sessao-criado">—</dd>
+      <dt>Subject (sub)</dt><dd id="sessao-sub">—</dd>
+      <dt>Emitido (iat)</dt><dd id="sessao-iat">—</dd>
+      <dt>Expira (exp)</dt> <dd id="sessao-exp">—</dd>
+      <dt>Restam</dt>       <dd class="contagem" id="sessao-contagem">—</dd>
+    </dl>
+
+    <div class="acoes">
+      <button id="btn-revalidar">Revalidar sessão</button>
+      <button id="btn-sair">Sair</button>
+    </div>
+  </section>
+
+  <!-- ============ console ============ -->
+  <details class="cartao console" id="console">
+    <summary>Console de requisições</summary>
+    <p class="vazio" id="console-vazio">Nenhuma requisição ainda.</p>
+    <div class="registro" id="registro"></div>
+  </details>
+
+  <footer>
+    <p>
+      API: <code id="rodape-api">—</code>
+    </p>
+    <p>
+      Laboratório sobre HTTP, sem TLS, com dados descartáveis.
+      O token fica em <code>localStorage</code> e é enviado no header
+      <code>Authorization: Bearer</code>.
+    </p>
+  </footer>
+
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
