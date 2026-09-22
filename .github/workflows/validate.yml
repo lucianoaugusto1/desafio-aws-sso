@@ -1,8 +1,17 @@
 name: validate
 
 on:
+  # Sem filtro de branch, um PR do proprio repositorio disparava duas vezes:
+  # uma pelo push e outra pelo pull_request. Com o filtro, branches de feature
+  # sao validadas pelo PR e a main pelo push direto.
   push:
+    branches: [main]
   pull_request:
+  # Permite que o deploy.yml chame este workflow como portao de qualidade.
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   api:
