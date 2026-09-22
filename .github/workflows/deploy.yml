@@ -1,8 +1,9 @@
 name: deploy
 
+# Disparo apenas manual. O gatilho automatico em push na main ressuscitava
+# infraestrutura paga a cada commit - inclusive commits que so mexiam em
+# documentacao. Para publicar:  gh workflow run deploy.yml
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # id-token: write e o que permite ao runner pedir o token OIDC. Sem esta
@@ -19,7 +20,14 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
+  # Portao de qualidade. Reusa o validate.yml em vez de duplicar os jobs.
+  # Sem isto os dois workflows nao se conheciam, e um deploy publicaria
+  # codigo com teste quebrado.
+  validar:
+    uses: ./.github/workflows/validate.yml
+
   deploy:
+    needs: validar
     name: build, deploy e publicacao
     runs-on: ubuntu-24.04
     steps:

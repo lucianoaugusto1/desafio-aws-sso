@@ -437,5 +437,17 @@ make down         # escala para 0
 make destroy      # remove tudo (preserva o bootstrap)
 ```
 
-Depois da Etapa 1, um `git push` na `main` executa as Etapas 2 a 4 sozinho, pelo
-[workflow de deploy](../.github/workflows/deploy.yml).
+Depois da Etapa 1, o [workflow de deploy](../.github/workflows/deploy.yml)
+executa as Etapas 2 a 4 sozinho:
+
+```bash
+gh workflow run deploy.yml
+gh run watch
+```
+
+O disparo é **manual de propósito**. Com o gatilho automático em `push` na
+`main`, qualquer commit — inclusive um que só mexesse neste arquivo —
+recriaria RDS e Fargate. O laboratório deve ficar destruído por padrão.
+
+O deploy depende do workflow de validação: se `ruff`, `pytest` ou `cfn-lint`
+falharem, o job de publicação nem começa.

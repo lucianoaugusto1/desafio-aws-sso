@@ -197,8 +197,17 @@ gh secret set AWS_DEPLOY_ROLE_ARN --body "$ROLE_ARN"
 gh secret set ALERT_EMAIL --body "seu-email@exemplo.com"
 ```
 
-A partir daqui, um push na `main` sobe o ambiente inteiro sozinho. Para operar à
-mão, use `make deploy`, `make up` e `make down`.
+A partir daqui o pipeline consegue publicar sozinho. O disparo é **manual, de
+propósito** — automático em cada push, ele ressuscitaria infraestrutura paga a
+cada commit:
+
+```bash
+gh workflow run deploy.yml
+```
+
+O deploy só prossegue se `ruff`, `pytest` e `cfn-lint` passarem: o workflow de
+deploy chama o de validação como portão. Para operar da sua máquina, use
+`make deploy`, `make up` e `make down`.
 
 ### Duas armadilhas conhecidas
 
