@@ -10,6 +10,10 @@ usuários em PostgreSQL e um front estático que consome essa API.
 > **Não use isto em produção.** Não há HTTPS, refresh token, rate limit nem
 > endurecimento de segurança. É um laboratório com dados descartáveis.
 
+🧭 **[Onde a IA se encaixa na infraestrutura](docs/IA-NA-INFRA.md)** — mapa de
+oportunidades por fase do ciclo de vida, com o critério para decidir o que
+delegar a um agente e o que não.
+
 📖 **[Roteiro passo a passo em `docs/EXECUCAO.md`](docs/EXECUCAO.md)** — do zero
 até a destruição, com os comandos exatos, o custo real medido e as 12 armadilhas
 que apareceram numa execução de verdade.
